@@ -3,13 +3,6 @@ from telebot.types import ReplyKeyboardMarkup
 import os
 
 TOKEN = os.getenv("BOT_TOKEN")
-
-print("TOKEN:", TOKEN)   # 👈 ये add करो
-
-if not TOKEN:
-    print("❌ BOT_TOKEN not found")
-    exit()
-    
 bot = telebot.TeleBot(TOKEN)
 
 user_data = {}
