@@ -1,9 +1,12 @@
 import telebot
-from telebot.types import ReplyKeyboardMarkup
 import os
 
-TOKEN = "8580811042:AAEnH_ETPkcvVaRcltXr4XwIp4wqvhx2V8c"
+TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
+
+@bot.message_handler(func=lambda m: True)
+def reply(message):
+    bot.reply_to(message, "Bot is working 🚀")
 
 user_data = {}
 
