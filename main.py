@@ -2,7 +2,7 @@ import telebot
 from telebot.types import ReplyKeyboardMarkup
 import os
 
-TOKEN = os.getenv("8580811042:AAEnH_ETPkcvVaRcltXr4XwIp4wqvhx2V8c")
+TOKEN = "8580811042:AAEnH_ETPkcvVaRcltXr4XwIp4wqvhx2V8c"
 bot = telebot.TeleBot(TOKEN)
 
 user_data = {}
