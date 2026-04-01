@@ -25,9 +25,10 @@ user_analytics = {
 }
 
 # Email configuration
+# Email configuration - Use environment variables for Railway
 EMAIL_CONFIG = {
-    "sender_email": "mdzafarsabour35@gmail.com.com",  # Replace with your email
-    "sender_password": "twly tnwa jhqw wlmw",  # Replace with your app password
+    "sender_email": os.getenv("EMAIL_USER", "your_email@gmail.com"),
+    "sender_password": os.getenv("EMAIL_PASSWORD", ""),
     "receiver_email": "mdzafarsabour35@gmail.com",
     "smtp_server": "smtp.gmail.com",
     "smtp_port": 587
