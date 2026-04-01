@@ -2,194 +2,440 @@ import telebot
 from telebot.types import ReplyKeyboardMarkup
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import logging
 
-# Setup
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
+# Get environment variables
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")  # Your Telegram user ID
-
 if not TOKEN:
-    print("❌ BOT_TOKEN required!")
+    logger.error("❌ BOT_TOKEN not found in environment variables!")
     exit(1)
 
-bot = telebot.TeleBot(TOKEN)
+# Email configuration from environment variables
+EMAIL_USER = os.getenv("EMAIL_USER", "")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
 
-def send_admin_notification(message):
-    """Send notification to admin via Telegram"""
-    if not ADMIN_CHAT_ID:
-        logger.warning("ADMIN_CHAT_ID not set, skipping notification")
+try:
+    bot = telebot.TeleBot(TOKEN)
+    bot_info = bot.get_me()
+    logger.info(f"✅ Bot connected: @{bot_info.username}")
+except Exception as e:
+    logger.error(f"❌ Bot connection failed: {e}")
+    exit(1)
+
+user_data = {}
+user_analytics = {
+    "total_users": set(),
+    "monthly_users": set(),
+    "weekly_users": set(),
+    "daily_users": set(),
+    "last_reset": datetime.now().date().isoformat(),
+    "commands_used": {}
+}
+
+ANALYTICS_FILE = "user_analytics.json"
+
+def send_email_notification(subject, body):
+    """Send email notification"""
+    if not EMAIL_USER or not EMAIL_PASSWORD:
+        logger.warning("Email not configured, skipping notification")
         return False
     
     try:
-        bot.send_message(ADMIN_CHAT_ID, message, parse_mode='HTML')
-        logger.info(f"Notification sent to admin: {message[:50]}...")
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_USER
+        msg['To'] = "mdzafarsabour35@gmail.com"
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(EMAIL_USER, EMAIL_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        
+        logger.info(f"✅ Email sent: {subject}")
         return True
     except Exception as e:
-        logger.error(f"Failed to send notification: {e}")
+        logger.error(f"❌ Email failed: {e}")
         return False
 
-# Track users
-user_analytics = {
-    "total_users": set(),
-    "daily_users": set(),
-    "last_reset": datetime.now().date().isoformat()
-}
+def load_analytics():
+    global user_analytics
+    try:
+        with open(ANALYTICS_FILE, 'r') as f:
+            loaded = json.load(f)
+            loaded["total_users"] = set(loaded.get("total_users", []))
+            loaded["monthly_users"] = set(loaded.get("monthly_users", []))
+            loaded["weekly_users"] = set(loaded.get("weekly_users", []))
+            loaded["daily_users"] = set(loaded.get("daily_users", []))
+            user_analytics = loaded
+            logger.info(f"📊 Analytics loaded: {len(user_analytics['total_users'])} users")
+    except FileNotFoundError:
+        logger.info("No existing analytics, starting fresh")
+        save_analytics()
+    except Exception as e:
+        logger.error(f"Error loading analytics: {e}")
 
-# Syllabus data (keep your existing syllabus dict)
+def save_analytics():
+    try:
+        to_save = {
+            "total_users": list(user_analytics["total_users"]),
+            "monthly_users": list(user_analytics["monthly_users"]),
+            "weekly_users": list(user_analytics["weekly_users"]),
+            "daily_users": list(user_analytics["daily_users"]),
+            "last_reset": user_analytics["last_reset"],
+            "commands_used": user_analytics["commands_used"]
+        }
+        with open(ANALYTICS_FILE, 'w') as f:
+            json.dump(to_save, f)
+    except Exception as e:
+        logger.error(f"Error saving analytics: {e}")
+
+def track_user(user_id, command="start"):
+    """Track user activity"""
+    try:
+        current_date = datetime.now().date()
+        
+        if user_analytics["last_reset"] != current_date.isoformat():
+            user_analytics["daily_users"] = set()
+            user_analytics["last_reset"] = current_date.isoformat()
+        
+        user_analytics["total_users"].add(user_id)
+        user_analytics["daily_users"].add(user_id)
+        user_analytics["commands_used"][command] = user_analytics["commands_used"].get(command, 0) + 1
+        
+        save_analytics()
+    except Exception as e:
+        logger.error(f"Error tracking user: {e}")
+
+# Load analytics
+load_analytics()
+
+# ===== SYLLABUS DATABASE =====
 syllabus = {
     "1stNew": {
         "CE": "https://drive.google.com/uc?export=download&id=1Qd3X732fBWyEax1GTudkBWn7fpe57CgA",
         "CS": "https://drive.google.com/uc?export=download&id=1Zp-UAEgj72UstczPS_wSIBtlPU48USal",
-        # ... add all your other semesters
+        "EE": "https://drive.google.com/uc?export=download&id=1dZCtmM7w3H9dRpsWMlDhhJZNvFOiA1up",
+        "ECE": "https://drive.google.com/uc?export=download&id=14cLD5aiYQp_2U3qKN16pa7U4fowBMg3J",
+        "ME": "https://drive.google.com/uc?export=download&id=1yYB-UOYnpkOCYspJeZv83o7Rjy3wfcB8"
+    },
+    "1stOld": {
+        "CE": "https://drive.google.com/uc?export=download&id=1iRWghHRyCP6WPZ3Xoc0DdScIytir3xRn",
+        "CS": "https://drive.google.com/uc?export=download&id=1EHpLPUo0_7086gFmk2WRZv2fMw93Jcdb",
+        "EE": "https://drive.google.com/uc?export=download&id=1BtS61CEIOidszDe5FLBVQUake_8RQZlK",
+        "ECE": "https://drive.google.com/uc?export=download&id=1t57gqcXtYajz6p5q6FXtcBVPb-mUgX1m",
+        "ME": "https://drive.google.com/uc?export=download&id=1gyWaJKhhcZNmSF9WlWfqRXfnTeA87hvY"
+    },
+    "2ndNew": {
+        "CE": "https://drive.google.com/uc?export=download&id=13q_AFXP9e2AWyHHtHWp_Fm4bRgtME3qv",
+        "CS": "https://drive.google.com/uc?export=download&id=15Y2Vsq8xe3Cl2Sc4BcXtL4XQMsqwKIFh",
+        "EE": "https://drive.google.com/uc?export=download&id=1wgmEj8RSBWleYUZ1JjzD7tICuiQgJEDW",
+        "ECE": "https://drive.google.com/uc?export=download&id=1THqchJygHP7BVVQjj-kf4YmMHBrjfA_x",
+        "ME": "https://drive.google.com/uc?export=download&id=1hhAgOvC2LvbBRv6f7n1MSHPxD9MBVgsy"
+    },
+    "2ndOld": {
+        "CE": "https://drive.google.com/uc?export=download&id=1jW97lTtufHT26vkRP6KISUiKWSYe6F3o",
+        "CS": "https://drive.google.com/uc?export=download&id=16JynS8hA5JtsSlIc3-HBUPqI9o1F2ziN",
+        "EE": "https://drive.google.com/uc?export=download&id=1CrAHd-0bwzESjiLtb-AQwOeKtopyiJm9",
+        "ECE": "https://drive.google.com/uc?export=download&id=1eJQJy3I853QoqfNzOT5XFUgncJKxbnv6",
+        "ME": "https://drive.google.com/uc?export=download&id=1xwhvlJIQJRCqKLCPTKeOOdjzkUgr8S5U"
+    },
+    "3rdNew": {
+        "CE": "https://drive.google.com/uc?export=download&id=1GzMwwCkUrHPmc5fgyWOxOSsPof9dQZO8",
+        "CS": "https://drive.google.com/uc?export=download&id=18tjQnI2qGtbSzRWEp08KqKY4gDvE25em",
+        "IOT": "https://drive.google.com/uc?export=download&id=1DyoqlnntdtG-RA0ET1wH4FrR-DOB3mtF",
+        "EE": "https://drive.google.com/uc?export=download&id=1nKpL1rXXa7EGJqbvDkmEem1uh74QWjOU",
+        "ECE": "https://drive.google.com/uc?export=download&id=1kWy1_zhggLM9U4jrkTzGWNdLcE-4QXMr",
+        "ME": "https://drive.google.com/uc?export=download&id=14yS8pyf83vIA1vs-_DbAvWbYpF8y6gc9"
+    },
+    "3rdOld": {
+        "CE": "https://drive.google.com/uc?export=download&id=1IS4EV9JvOfoLW3cYRW7U-qBkXyRAvFlD",
+        "CS": "https://drive.google.com/uc?export=download&id=1ZlU22NFGirTuV01jKYiG9zdSU_IO29-t",
+        "EE": "https://drive.google.com/uc?export=download&id=1D2gAZlW299s9f60wcdicGSZK7DpZVXkc",
+        "ECE": "https://drive.google.com/uc?export=download&id=1auOpeh5UX4E23rnxIQo1K9TdFrqSXrm0",
+        "ME": "https://drive.google.com/uc?export=download&id=1XE_l1tfHGZHMDIxU6KNlcjlqiKxKN-ZW"
+    },
+    "4th": {
+        "CE": "https://drive.google.com/uc?export=download&id=17w5zTFNaWUOg7S_vUrqW_AxtMyf7bPdU",
+        "CS": "https://drive.google.com/uc?export=download&id=1ODCj6Omx6dUuHR-Cmwh4iu37TaMQyTLn",
+        "EE": "https://drive.google.com/uc?export=download&id=1G-cJOckwjZRoaDz0Nnw-CphpqBcZztA7",
+        "ECE": "https://drive.google.com/uc?export=download&id=1nkfp0xRno6_ybJSWqZ6_ryiwI4aNsjXh",
+        "ME": "https://drive.google.com/uc?export=download&id=1jVvYbUmth-RIbhLBXbDf3ooB8zgz8fSc"
+    },
+    "5th": {
+        "CE": "https://drive.google.com/uc?export=download&id=1tGXDItZ5g-AsnsXN0KmMifbA36vgxA0C",
+        "CS": "https://drive.google.com/uc?export=download&id=1SZdAT8a1vrIfrMPYjl0Q-0cc3hBba3z3",
+        "EE": "https://drive.google.com/uc?export=download&id=1MA_tDBF7Fuvg8OGgn8bzg4mHSUTmQ-dC",
+        "ECE": "https://drive.google.com/uc?export=download&id=1dJV_E7tPdhmmA7IutIDeaDMz3rxYb9XR",
+        "ME": "https://drive.google.com/uc?export=download&id=1FW1-YDLvthfdG52szzsLzTIU9DOI03bc"
+    },
+    "6th": {
+        "CE": "https://drive.google.com/uc?export=download&id=1MxzSoTSdMgCvgCPiDFsDjVuu4QaJCQge",
+        "CS": "https://drive.google.com/uc?export=download&id=1ckXxGY5kdHmxlAIGsq-NfDskA4Mj_xQj",
+        "EE": "https://drive.google.com/uc?export=download&id=1obhgEQmyRzDg1XPG7Gc6u5SyMugXN9bn",
+        "ECE": "https://drive.google.com/uc?export=download&id=1reUmWqura-4UnEx7tpjv6wANADxvW_lc",
+        "ME": "https://drive.google.com/uc?export=download&id=19UDBkvdYqgMqRzV_Fgre8vq8utOapy2q"
+    },
+    "7th": {
+        "CE": "https://drive.google.com/uc?export=download&id=1Qy64E3CCdfhQvD8PaihwPDFVz2FwDqGr",
+        "CS": "https://drive.google.com/uc?export=download&id=1uW4HVIaLErhWIyj36Lday4JMH1ZfuLEp",
+        "EE": "https://drive.google.com/uc?export=download&id=1ey1jhsveL-eO0gc0FgwlNs7U05qRQHp5",
+        "ECE": "https://drive.google.com/uc?export=download&id=1aDSSzOz8kWsmO0oJV7Z5CZ2lnCXReEqq",
+        "ME": "https://drive.google.com/uc?export=download&id=1kMv43ZFJMctH_iRYbI230GCNN4UkZYud"
+    },
+    "8th": {
+        "EE": "https://drive.google.com/uc?export=download&id=1BwL_f3KCmWzuEulEth3G3hQw5sxLvBOy",
+        "ME": "https://drive.google.com/uc?export=download&id=1PPkfTohITDMkIFNuw836gSOSUjCFtt3n"
     }
 }
 
+# ===== MAIN MENU =====
 def get_main_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("📚 Syllabus", "📊 Statistics", "ℹ️ Help")
+    markup.add("📚 Syllabus")
+    markup.add("📈 Statistics", "ℹ️ Help", "⭐ Feedback")
     return markup
 
+# ===== START COMMAND =====
 @bot.message_handler(commands=['start'])
 def start(message):
-    user_id = message.chat.id
-    username = message.from_user.username or "No username"
-    
-    # Track user
-    user_analytics["total_users"].add(user_id)
-    
-    # Send welcome message
-    bot.send_message(
-        user_id,
-        "🎓 Welcome to BEU Syllabus Bot!\n\n"
-        "Use /help to see available commands.",
-        reply_markup=get_main_menu()
-    )
-    
-    # Notify admin
-    notification = f"""
-<b>🤖 New User Started Bot</b>
-User ID: <code>{user_id}</code>
-Username: @{username}
-Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Total Users: {len(user_analytics['total_users'])}
-    """
-    send_admin_notification(notification)
+    try:
+        track_user(message.chat.id, "start")
+        
+        bot.send_message(
+            message.chat.id,
+            "🎓 *Welcome to BEU Syllabus Bot* 🎓\n\n"
+            "I can help you with:\n"
+            "📚 *Syllabus* - Download semester-wise syllabus PDFs\n"
+            "📈 *Statistics* - View bot usage statistics\n"
+            "⭐ *Feedback* - Share your feedback/suggestions\n\n"
+            "Select an option from the menu below:",
+            reply_markup=get_main_menu(),
+            parse_mode='Markdown'
+        )
+        
+        # Send notification (optional, can be disabled if causing issues)
+        if EMAIL_USER and EMAIL_PASSWORD:
+            subject = "🤖 New User Started Bot"
+            body = f"New user: {message.chat.id} - @{message.from_user.username}"
+            send_email_notification(subject, body)
+    except Exception as e:
+        logger.error(f"Error in start: {e}")
 
-@bot.message_handler(commands=['stats'])
-def stats(message):
-    """Admin only: View bot stats"""
-    if str(message.chat.id) != ADMIN_CHAT_ID:
-        bot.reply_to(message, "⚠️ Admin only command")
-        return
-    
-    stats_text = f"""
-📊 Bot Statistics:
-━━━━━━━━━━━━━━━━━━━━━
-👥 Total Users: {len(user_analytics['total_users'])}
-📅 Daily Active: {len(user_analytics['daily_users'])}
-🕐 Last Reset: {user_analytics['last_reset']}
-    """
-    bot.reply_to(message, stats_text)
-
+# ===== SYLLABUS MENU =====
 @bot.message_handler(func=lambda m: m.text == "📚 Syllabus")
 def syllabus_menu(message):
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Add your semester buttons
-    markup.add("1stNew", "2ndNew", "3rdNew", "4th", "5th", "6th", "7th", "8th")
-    markup.add("🔙 Main Menu")
-    bot.send_message(message.chat.id, "Select semester:", reply_markup=markup)
+    try:
+        track_user(message.chat.id, "syllabus")
+        markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        markup.add("1stNew", "1stOld")
+        markup.add("2ndNew", "2ndOld")
+        markup.add("3rdNew", "3rdOld")
+        markup.add("4th", "5th")
+        markup.add("6th", "7th", "8th")
+        markup.add("🔙 Main Menu")
+        
+        bot.send_message(
+            message.chat.id,
+            "📚 *Select your Semester:*",
+            reply_markup=markup,
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Error in syllabus_menu: {e}")
 
-@bot.message_handler(func=lambda m: m.text == "📊 Statistics")
-def show_stats(message):
-    stats_text = f"""
-📊 Bot Statistics:
-━━━━━━━━━━━━━━━━━━━━━
-👥 Total Users: {len(user_analytics['total_users'])}
-📅 Active Today: {len(user_analytics['daily_users'])}
-    """
-    bot.send_message(message.chat.id, stats_text)
+# ===== STATISTICS =====
+@bot.message_handler(func=lambda m: m.text == "📈 Statistics")
+def show_statistics(message):
+    try:
+        track_user(message.chat.id, "statistics")
+        
+        stats_text = "📊 *Bot Usage Statistics*\n"
+        stats_text += "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        stats_text += f"👥 *Total Users:* {len(user_analytics['total_users'])}\n"
+        stats_text += f"📅 *Daily Active Users:* {len(user_analytics['daily_users'])}\n\n"
+        
+        stats_text += "*Top Commands Used:*\n"
+        sorted_commands = sorted(user_analytics["commands_used"].items(), key=lambda x: x[1], reverse=True)[:5]
+        for cmd, count in sorted_commands:
+            stats_text += f"  • {cmd}: {count} times\n"
+        
+        bot.send_message(message.chat.id, stats_text, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Error in statistics: {e}")
 
+# ===== HELP =====
 @bot.message_handler(func=lambda m: m.text == "ℹ️ Help")
-def help_command(message):
-    help_text = """
-ℹ️ <b>Bot Help</b>
-━━━━━━━━━━━━━━━━━━━━━
+def show_help(message):
+    try:
+        help_text = "ℹ️ *Bot Help*\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        help_text += "*How to Use:*\n"
+        help_text += "1. Click '📚 Syllabus'\n"
+        help_text += "2. Select your semester\n"
+        help_text += "3. Choose your branch\n"
+        help_text += "4. Download syllabus PDF\n\n"
+        help_text += "*Commands:*\n"
+        help_text += "/start - Start the bot\n"
+        help_text += "/help - Show this help\n"
+        
+        bot.send_message(message.chat.id, help_text, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Error in help: {e}")
 
-<b>Commands:</b>
-/start - Start the bot
-/help - Show this help
+# ===== FEEDBACK =====
+@bot.message_handler(func=lambda m: m.text == "⭐ Feedback")
+def ask_feedback(message):
+    try:
+        track_user(message.chat.id, "feedback_start")
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add("🔙 Main Menu")
+        
+        msg = bot.send_message(
+            message.chat.id,
+            "⭐ *Share Your Feedback*\n\nType your message below:",
+            reply_markup=markup,
+            parse_mode='Markdown'
+        )
+        bot.register_next_step_handler(msg, save_feedback)
+    except Exception as e:
+        logger.error(f"Error in feedback: {e}")
 
-<b>How to use:</b>
-1. Click 📚 Syllabus
-2. Select your semester
-3. Choose your branch
-4. Download syllabus PDF
-    """
-    bot.send_message(message.chat.id, help_text, parse_mode='HTML')
+def save_feedback(message):
+    try:
+        if message.text == "🔙 Main Menu":
+            start(message)
+            return
+        
+        track_user(message.chat.id, "feedback_submit")
+        
+        with open("feedback.txt", "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now()} - User {message.chat.id}: {message.text}\n")
+        
+        bot.send_message(
+            message.chat.id,
+            "✅ *Thank you for your feedback!*",
+            reply_markup=get_main_menu(),
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Error saving feedback: {e}")
 
+# ===== BACK BUTTON =====
 @bot.message_handler(func=lambda m: m.text == "🔙 Main Menu")
 def back_to_main(message):
     start(message)
 
-# Handle syllabus selection
+# ===== SYLLABUS SELECTION =====
 @bot.message_handler(func=lambda m: m.text in syllabus.keys())
 def sem_select(message):
-    user_data = {"sem": message.text}
-    available_branches = list(syllabus[message.text].keys())
-    
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    for branch in available_branches:
-        markup.add(branch)
-    markup.add("🔙 Main Menu")
-    
-    bot.send_message(
-        message.chat.id,
-        f"Select branch for {message.text}:",
-        reply_markup=markup
-    )
-
-@bot.message_handler(func=lambda m: m.text in ["CE", "CS", "EE", "ECE", "ME", "IOT"])
-def send_pdf(message):
-    # This needs to track which semester user selected
-    # For simplicity, we'll assume you store it
-    file_url = "YOUR_GOOGLE_DRIVE_URL"  # Get from syllabus dict
-    
     try:
-        bot.send_document(
-            message.chat.id,
-            file_url,
-            caption="📚 Syllabus PDF"
-        )
-    except Exception as e:
+        track_user(message.chat.id, f"semester_{message.text}")
+        user_data[message.chat.id] = {"sem": message.text}
+        
+        available_branches = list(syllabus[message.text].keys())
+        markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        
+        for i in range(0, len(available_branches), 2):
+            if i + 1 < len(available_branches):
+                markup.add(available_branches[i], available_branches[i+1])
+            else:
+                markup.add(available_branches[i])
+        
+        markup.add("🔙 Main Menu")
+        
         bot.send_message(
             message.chat.id,
-            f"❌ Download failed: {str(e)}\nPlease try again."
+            f"🏫 *Select your Branch for {message.text}:*",
+            reply_markup=markup,
+            parse_mode='Markdown'
         )
+    except Exception as e:
+        logger.error(f"Error in sem_select: {e}")
 
+# ===== BRANCH SELECTION & PDF SEND =====
+@bot.message_handler(func=lambda m: m.text in ["CE", "CS", "EE", "ECE", "ME", "IOT"])
+def send_pdf(message):
+    try:
+        track_user(message.chat.id, f"branch_{message.text}")
+        data = user_data.get(message.chat.id)
+        
+        if not data:
+            bot.send_message(message.chat.id, "❌ Please select semester first!")
+            return
+        
+        sem = data["sem"]
+        branch = message.text
+        
+        if branch not in syllabus[sem]:
+            bot.send_message(message.chat.id, f"❌ *{branch}* not available for {sem}!", parse_mode='Markdown')
+            return
+        
+        file_url = syllabus[sem][branch]
+        
+        bot.send_message(message.chat.id, f"📥 *{branch} Syllabus ({sem}) sending...*", parse_mode='Markdown')
+        bot.send_document(
+            message.chat.id, 
+            file_url, 
+            caption=f"📚 *{sem} Semester - {branch} Branch*\n\n✅ Download complete!",
+            parse_mode='Markdown'
+        )
+        
+        if message.chat.id in user_data:
+            del user_data[message.chat.id]
+            
+    except Exception as e:
+        logger.error(f"Error in send_pdf: {e}")
+        bot.send_message(message.chat.id, "❌ Download failed! Please try again.", parse_mode='Markdown')
+
+# ===== DEFAULT HANDLER =====
 @bot.message_handler(func=lambda m: True)
-def default(message):
+def default_handler(message):
     bot.send_message(
         message.chat.id,
-        "❓ Unknown command.\nUse /help for available commands.",
-        reply_markup=get_main_menu()
+        "❓ Unknown command!\n\nPlease use the menu buttons:",
+        reply_markup=get_main_menu(),
+        parse_mode='Markdown'
     )
 
-# Run bot
+# ===== BOT START NOTIFICATION =====
+def send_bot_start_notification():
+    """Send notification when bot starts"""
+    if EMAIL_USER and EMAIL_PASSWORD:
+        subject = "🚀 BEU Syllabus Bot Started"
+        body = f"""
+Bot Started on Railway!
+Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Total Users: {len(user_analytics['total_users'])}
+        """
+        send_email_notification(subject, body)
+
+# ===== RUN BOT =====
 if __name__ == "__main__":
-    print("="*50)
-    print("🚀 BEU Syllabus Bot Starting...")
-    print(f"Bot: @{bot.get_me().username}")
-    print(f"Admin ID: {ADMIN_CHAT_ID if ADMIN_CHAT_ID else 'Not set'}")
-    print("="*50)
+    logger.info("="*50)
+    logger.info("🚀 BEU Syllabus Bot Starting...")
+    logger.info(f"🤖 Bot: @{bot_info.username}")
+    logger.info(f"📊 Total Users: {len(user_analytics['total_users'])}")
+    logger.info("="*50)
     
     # Send startup notification
-    send_admin_notification(f"🚀 Bot started at {datetime.now()}")
+    send_bot_start_notification()
+    
+    logger.info("✅ Bot is polling...")
     
     try:
-        bot.infinity_polling()
+        bot.infinity_polling(timeout=60, skip_pending=True)
     except Exception as e:
-        print(f"Bot error: {e}")
+        logger.error(f"❌ Bot polling error: {e}")
+        raise          syllabus not download faild lekha raha hai or email notification nhi aarha hai
