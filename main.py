@@ -1,5 +1,5 @@
 import telebot
-from telebot.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import ReplyKeyboardMarkup
 import os
 import json
 from datetime import datetime, timedelta
@@ -7,7 +7,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import logging
-import requests
 
 # Configure logging
 logging.basicConfig(
@@ -25,9 +24,6 @@ if not TOKEN:
 # Email configuration from environment variables
 EMAIL_USER = os.getenv("EMAIL_USER", "")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
-
-# Add these for debugging
-logger.info(f"Email configured: {'Yes' if EMAIL_USER and EMAIL_PASSWORD else 'No'}")
 
 try:
     bot = telebot.TeleBot(TOKEN)
@@ -49,26 +45,8 @@ user_analytics = {
 
 ANALYTICS_FILE = "user_analytics.json"
 
-def test_email_connection():
-    """Test email configuration"""
-    if not EMAIL_USER or not EMAIL_PASSWORD:
-        logger.warning("Email not configured")
-        return False
-    
-    try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.set_debuglevel(1)  # Enable debug output
-        server.starttls()
-        server.login(EMAIL_USER, EMAIL_PASSWORD)
-        server.quit()
-        logger.info("✅ Email connection test successful")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Email connection test failed: {e}")
-        return False
-
-def send_email_notification(subject, body, to_email="mdzafarsabour35@gmail.com"):
-    """Send email notification with better error handling"""
+def send_email_notification(subject, body):
+    """Send email notification"""
     if not EMAIL_USER or not EMAIL_PASSWORD:
         logger.warning("Email not configured, skipping notification")
         return False
@@ -76,13 +54,11 @@ def send_email_notification(subject, body, to_email="mdzafarsabour35@gmail.com")
     try:
         msg = MIMEMultipart()
         msg['From'] = EMAIL_USER
-        msg['To'] = to_email
+        msg['To'] = "mdzafarsabour35@gmail.com"
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain'))
         
-        logger.info(f"Attempting to send email to {to_email}")
         server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.set_debuglevel(1)  # Enable debug output
         server.starttls()
         server.login(EMAIL_USER, EMAIL_PASSWORD)
         server.send_message(msg)
@@ -146,12 +122,7 @@ def track_user(user_id, command="start"):
 # Load analytics
 load_analytics()
 
-# Test email on startup
-test_email_connection()
-
-# ===== SYLLABUS DATABASE WITH VERIFIED LINKS =====
-# Note: You need to verify these Google Drive links work
-# If they don't work, you'll need to get new shareable links from Google Drive
+# ===== SYLLABUS DATABASE =====
 syllabus = {
     "1stNew": {
         "CE": "https://drive.google.com/uc?export=download&id=1Qd3X732fBWyEax1GTudkBWn7fpe57CgA",
@@ -167,19 +138,68 @@ syllabus = {
         "ECE": "https://drive.google.com/uc?export=download&id=1t57gqcXtYajz6p5q6FXtcBVPb-mUgX1m",
         "ME": "https://drive.google.com/uc?export=download&id=1gyWaJKhhcZNmSF9WlWfqRXfnTeA87hvY"
     },
-    # ... (rest of your syllabus dictionary remains the same)
+    "2ndNew": {
+        "CE": "https://drive.google.com/uc?export=download&id=13q_AFXP9e2AWyHHtHWp_Fm4bRgtME3qv",
+        "CS": "https://drive.google.com/uc?export=download&id=15Y2Vsq8xe3Cl2Sc4BcXtL4XQMsqwKIFh",
+        "EE": "https://drive.google.com/uc?export=download&id=1wgmEj8RSBWleYUZ1JjzD7tICuiQgJEDW",
+        "ECE": "https://drive.google.com/uc?export=download&id=1THqchJygHP7BVVQjj-kf4YmMHBrjfA_x",
+        "ME": "https://drive.google.com/uc?export=download&id=1hhAgOvC2LvbBRv6f7n1MSHPxD9MBVgsy"
+    },
+    "2ndOld": {
+        "CE": "https://drive.google.com/uc?export=download&id=1jW97lTtufHT26vkRP6KISUiKWSYe6F3o",
+        "CS": "https://drive.google.com/uc?export=download&id=16JynS8hA5JtsSlIc3-HBUPqI9o1F2ziN",
+        "EE": "https://drive.google.com/uc?export=download&id=1CrAHd-0bwzESjiLtb-AQwOeKtopyiJm9",
+        "ECE": "https://drive.google.com/uc?export=download&id=1eJQJy3I853QoqfNzOT5XFUgncJKxbnv6",
+        "ME": "https://drive.google.com/uc?export=download&id=1xwhvlJIQJRCqKLCPTKeOOdjzkUgr8S5U"
+    },
+    "3rdNew": {
+        "CE": "https://drive.google.com/uc?export=download&id=1GzMwwCkUrHPmc5fgyWOxOSsPof9dQZO8",
+        "CS": "https://drive.google.com/uc?export=download&id=18tjQnI2qGtbSzRWEp08KqKY4gDvE25em",
+        "IOT": "https://drive.google.com/uc?export=download&id=1DyoqlnntdtG-RA0ET1wH4FrR-DOB3mtF",
+        "EE": "https://drive.google.com/uc?export=download&id=1nKpL1rXXa7EGJqbvDkmEem1uh74QWjOU",
+        "ECE": "https://drive.google.com/uc?export=download&id=1kWy1_zhggLM9U4jrkTzGWNdLcE-4QXMr",
+        "ME": "https://drive.google.com/uc?export=download&id=14yS8pyf83vIA1vs-_DbAvWbYpF8y6gc9"
+    },
+    "3rdOld": {
+        "CE": "https://drive.google.com/uc?export=download&id=1IS4EV9JvOfoLW3cYRW7U-qBkXyRAvFlD",
+        "CS": "https://drive.google.com/uc?export=download&id=1ZlU22NFGirTuV01jKYiG9zdSU_IO29-t",
+        "EE": "https://drive.google.com/uc?export=download&id=1D2gAZlW299s9f60wcdicGSZK7DpZVXkc",
+        "ECE": "https://drive.google.com/uc?export=download&id=1auOpeh5UX4E23rnxIQo1K9TdFrqSXrm0",
+        "ME": "https://drive.google.com/uc?export=download&id=1XE_l1tfHGZHMDIxU6KNlcjlqiKxKN-ZW"
+    },
+    "4th": {
+        "CE": "https://drive.google.com/uc?export=download&id=17w5zTFNaWUOg7S_vUrqW_AxtMyf7bPdU",
+        "CS": "https://drive.google.com/uc?export=download&id=1ODCj6Omx6dUuHR-Cmwh4iu37TaMQyTLn",
+        "EE": "https://drive.google.com/uc?export=download&id=1G-cJOckwjZRoaDz0Nnw-CphpqBcZztA7",
+        "ECE": "https://drive.google.com/uc?export=download&id=1nkfp0xRno6_ybJSWqZ6_ryiwI4aNsjXh",
+        "ME": "https://drive.google.com/uc?export=download&id=1jVvYbUmth-RIbhLBXbDf3ooB8zgz8fSc"
+    },
+    "5th": {
+        "CE": "https://drive.google.com/uc?export=download&id=1tGXDItZ5g-AsnsXN0KmMifbA36vgxA0C",
+        "CS": "https://drive.google.com/uc?export=download&id=1SZdAT8a1vrIfrMPYjl0Q-0cc3hBba3z3",
+        "EE": "https://drive.google.com/uc?export=download&id=1MA_tDBF7Fuvg8OGgn8bzg4mHSUTmQ-dC",
+        "ECE": "https://drive.google.com/uc?export=download&id=1dJV_E7tPdhmmA7IutIDeaDMz3rxYb9XR",
+        "ME": "https://drive.google.com/uc?export=download&id=1FW1-YDLvthfdG52szzsLzTIU9DOI03bc"
+    },
+    "6th": {
+        "CE": "https://drive.google.com/uc?export=download&id=1MxzSoTSdMgCvgCPiDFsDjVuu4QaJCQge",
+        "CS": "https://drive.google.com/uc?export=download&id=1ckXxGY5kdHmxlAIGsq-NfDskA4Mj_xQj",
+        "EE": "https://drive.google.com/uc?export=download&id=1obhgEQmyRzDg1XPG7Gc6u5SyMugXN9bn",
+        "ECE": "https://drive.google.com/uc?export=download&id=1reUmWqura-4UnEx7tpjv6wANADxvW_lc",
+        "ME": "https://drive.google.com/uc?export=download&id=19UDBkvdYqgMqRzV_Fgre8vq8utOapy2q"
+    },
+    "7th": {
+        "CE": "https://drive.google.com/uc?export=download&id=1Qy64E3CCdfhQvD8PaihwPDFVz2FwDqGr",
+        "CS": "https://drive.google.com/uc?export=download&id=1uW4HVIaLErhWIyj36Lday4JMH1ZfuLEp",
+        "EE": "https://drive.google.com/uc?export=download&id=1ey1jhsveL-eO0gc0FgwlNs7U05qRQHp5",
+        "ECE": "https://drive.google.com/uc?export=download&id=1aDSSzOz8kWsmO0oJV7Z5CZ2lnCXReEqq",
+        "ME": "https://drive.google.com/uc?export=download&id=1kMv43ZFJMctH_iRYbI230GCNN4UkZYud"
+    },
+    "8th": {
+        "EE": "https://drive.google.com/uc?export=download&id=1BwL_f3KCmWzuEulEth3G3hQw5sxLvBOy",
+        "ME": "https://drive.google.com/uc?export=download&id=1PPkfTohITDMkIFNuw836gSOSUjCFtt3n"
+    }
 }
-
-# Add this function to verify Google Drive links
-def verify_google_drive_link(file_id):
-    """Check if Google Drive file is accessible"""
-    try:
-        # Try to get file info without downloading
-        url = f"https://drive.google.com/uc?export=download&id={file_id}"
-        response = requests.head(url, allow_redirects=True, timeout=10)
-        return response.status_code == 200
-    except:
-        return False
 
 # ===== MAIN MENU =====
 def get_main_menu():
@@ -206,21 +226,13 @@ def start(message):
             parse_mode='Markdown'
         )
         
-        # Send notification with more details
+        # Send notification (optional, can be disabled if causing issues)
         if EMAIL_USER and EMAIL_PASSWORD:
             subject = "🤖 New User Started Bot"
-            body = f"""
-New user started the bot!
-
-User ID: {message.chat.id}
-Username: @{message.from_user.username if message.from_user.username else 'No username'}
-First Name: {message.from_user.first_name}
-Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-            """
+            body = f"New user: {message.chat.id} - @{message.from_user.username}"
             send_email_notification(subject, body)
     except Exception as e:
         logger.error(f"Error in start: {e}")
-        bot.send_message(message.chat.id, "❌ An error occurred. Please try again.")
 
 # ===== SYLLABUS MENU =====
 @bot.message_handler(func=lambda m: m.text == "📚 Syllabus")
@@ -276,8 +288,7 @@ def show_help(message):
         help_text += "4. Download syllabus PDF\n\n"
         help_text += "*Commands:*\n"
         help_text += "/start - Start the bot\n"
-        help_text += "/help - Show this help\n\n"
-        help_text += "*Note:* If download fails, please try again or contact support."
+        help_text += "/help - Show this help\n"
         
         bot.send_message(message.chat.id, help_text, parse_mode='Markdown')
     except Exception as e:
@@ -318,19 +329,6 @@ def save_feedback(message):
             reply_markup=get_main_menu(),
             parse_mode='Markdown'
         )
-        
-        # Send feedback via email
-        if EMAIL_USER and EMAIL_PASSWORD:
-            subject = "⭐ New Feedback Received"
-            body = f"""
-New feedback from user!
-
-User ID: {message.chat.id}
-Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Feedback: {message.text}
-            """
-            send_email_notification(subject, body)
-            
     except Exception as e:
         logger.error(f"Error saving feedback: {e}")
 
@@ -386,52 +384,20 @@ def send_pdf(message):
         
         file_url = syllabus[sem][branch]
         
-        # Send a "processing" message
-        processing_msg = bot.send_message(
+        bot.send_message(message.chat.id, f"📥 *{branch} Syllabus ({sem}) sending...*", parse_mode='Markdown')
+        bot.send_document(
             message.chat.id, 
-            f"📥 *Fetching {branch} Syllabus ({sem})...*\n\nPlease wait while I prepare the download...", 
+            file_url, 
+            caption=f"📚 *{sem} Semester - {branch} Branch*\n\n✅ Download complete!",
             parse_mode='Markdown'
         )
         
-        try:
-            # Try to send the document
-            bot.send_document(
-                message.chat.id, 
-                file_url, 
-                caption=f"📚 *{sem} Semester - {branch} Branch*\n\n✅ Download complete!",
-                parse_mode='Markdown',
-                timeout=30  # Add timeout
-            )
-            
-            # Delete processing message
-            bot.delete_message(message.chat.id, processing_msg.message_id)
-            
-        except Exception as download_error:
-            logger.error(f"Download error: {download_error}")
-            bot.delete_message(message.chat.id, processing_msg.message_id)
-            
-            # Send fallback message with direct link
-            bot.send_message(
-                message.chat.id,
-                f"⚠️ *Direct download failed!*\n\n"
-                f"Please try downloading from this link:\n"
-                f"{file_url}\n\n"
-                f"*{sem} Semester - {branch} Branch*",
-                parse_mode='Markdown'
-            )
-        
-        # Clear user data
         if message.chat.id in user_data:
             del user_data[message.chat.id]
             
     except Exception as e:
         logger.error(f"Error in send_pdf: {e}")
-        bot.send_message(
-            message.chat.id, 
-            "❌ Download failed! Please try again.\n\n"
-            "If the problem persists, contact support.",
-            parse_mode='Markdown'
-        )
+        bot.send_message(message.chat.id, "❌ Download failed! Please try again.", parse_mode='Markdown')
 
 # ===== DEFAULT HANDLER =====
 @bot.message_handler(func=lambda m: True)
@@ -449,14 +415,9 @@ def send_bot_start_notification():
     if EMAIL_USER and EMAIL_PASSWORD:
         subject = "🚀 BEU Syllabus Bot Started"
         body = f"""
-Bot Started Successfully!
-
+Bot Started on Railway!
 Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Bot Name: @{bot_info.username}
 Total Users: {len(user_analytics['total_users'])}
-Email Status: {'Configured' if EMAIL_USER and EMAIL_PASSWORD else 'Not Configured'}
-
-The bot is now running and accepting requests.
         """
         send_email_notification(subject, body)
 
@@ -466,7 +427,6 @@ if __name__ == "__main__":
     logger.info("🚀 BEU Syllabus Bot Starting...")
     logger.info(f"🤖 Bot: @{bot_info.username}")
     logger.info(f"📊 Total Users: {len(user_analytics['total_users'])}")
-    logger.info(f"📧 Email: {'Configured' if EMAIL_USER and EMAIL_PASSWORD else 'Not Configured'}")
     logger.info("="*50)
     
     # Send startup notification
@@ -478,4 +438,4 @@ if __name__ == "__main__":
         bot.infinity_polling(timeout=60, skip_pending=True)
     except Exception as e:
         logger.error(f"❌ Bot polling error: {e}")
-        raise
+        raise          syllabus not download faild lekha raha hai or email notification nhi aarha hai
