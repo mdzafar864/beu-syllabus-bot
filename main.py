@@ -1,16 +1,18 @@
 import telebot
-from telebot.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import ReplyKeyboardMarkup
 import os
 import json
 from datetime import datetime, timedelta
-import threading
-import time
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import socket
 
 TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    print("❌ ERROR: BOT_TOKEN not found in environment variables!")
+    exit(1)
+
 bot = telebot.TeleBot(TOKEN)
 
 user_data = {}
@@ -24,10 +26,9 @@ user_analytics = {
     "feature_usage": {}
 }
 
-# Email configuration
 # Email configuration - Use environment variables for Railway
 EMAIL_CONFIG = {
-    "sender_email": os.getenv("EMAIL_USER", "your_email@gmail.com"),
+    "sender_email": os.getenv("EMAIL_USER", ""),
     "sender_password": os.getenv("EMAIL_PASSWORD", ""),
     "receiver_email": "mdzafarsabour35@gmail.com",
     "smtp_server": "smtp.gmail.com",
@@ -39,22 +40,21 @@ ANALYTICS_FILE = "user_analytics.json"
 
 def send_email_notification(subject, body):
     """Send email notification"""
+    if not EMAIL_CONFIG["sender_email"] or not EMAIL_CONFIG["sender_password"]:
+        print("⚠️ Email not configured, skipping notification")
+        return False
+    
     try:
-        # Create message
         msg = MIMEMultipart()
         msg['From'] = EMAIL_CONFIG["sender_email"]
         msg['To'] = EMAIL_CONFIG["receiver_email"]
         msg['Subject'] = subject
         
-        # Attach body
         msg.attach(MIMEText(body, 'plain'))
         
-        # Create SMTP session
         server = smtplib.SMTP(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"])
         server.starttls()
         server.login(EMAIL_CONFIG["sender_email"], EMAIL_CONFIG["sender_password"])
-        
-        # Send email
         server.send_message(msg)
         server.quit()
         
@@ -69,7 +69,6 @@ def load_analytics():
     try:
         with open(ANALYTICS_FILE, 'r') as f:
             loaded = json.load(f)
-            # Convert sets from lists
             loaded["total_users"] = set(loaded.get("total_users", []))
             loaded["monthly_users"] = set(loaded.get("monthly_users", []))
             loaded["weekly_users"] = set(loaded.get("weekly_users", []))
@@ -95,7 +94,6 @@ def track_user(user_id, command="start"):
     """Track user activity"""
     current_date = datetime.now().date()
     
-    # Check if we need to reset daily/weekly/monthly counts
     if user_analytics["last_reset"] != current_date.isoformat():
         user_analytics["daily_users"] = set()
         user_analytics["weekly_users"] = set(
@@ -108,13 +106,10 @@ def track_user(user_id, command="start"):
         ) if user_analytics["monthly_users"] else set()
         user_analytics["last_reset"] = current_date.isoformat()
     
-    # Update user counts
     user_analytics["total_users"].add(user_id)
     user_analytics["daily_users"].add(user_id)
     user_analytics["weekly_users"].add(user_id)
     user_analytics["monthly_users"].add(user_id)
-    
-    # Track command usage
     user_analytics["commands_used"][command] = user_analytics["commands_used"].get(command, 0) + 1
     
     save_analytics()
@@ -213,7 +208,6 @@ def get_main_menu():
 def start(message):
     track_user(message.chat.id, "start")
     
-    # Send notification email when new user starts
     subject = f"🤖 New User Started Bot"
     body = f"""
 Bot Start Notification
@@ -351,13 +345,11 @@ def save_feedback(message):
     
     track_user(message.chat.id, "feedback_submit")
     
-    # Save to file (simple storage)
     with open("feedback.txt", "a", encoding="utf-8") as f:
         f.write(f"{datetime.now().isoformat()} - User {message.chat.id} ({message.from_user.username}):\n")
         f.write(f"{message.text}\n")
         f.write("-" * 50 + "\n")
     
-    # Send email notification for feedback
     subject = f"⭐ New Feedback Received"
     body = f"""
 Feedback Received
@@ -444,7 +436,6 @@ def send_pdf(message):
             parse_mode='Markdown'
         )
         
-        # Send email notification for syllabus download
         subject = f"📚 Syllabus Downloaded"
         body = f"""
 Syllabus Downloaded
@@ -481,7 +472,6 @@ Syllabus Downloaded
 # ===== ADMIN STATISTICS COMMAND =====
 @bot.message_handler(commands=['stats'])
 def admin_stats(message):
-    # You can add admin user IDs here
     admin_ids = []  # Add admin user IDs like: [123456789, 987654321]
     
     if message.from_user.id in admin_ids:
@@ -494,4 +484,13 @@ def admin_stats(message):
         
         sorted_commands = sorted(user_analytics["commands_used"].items(), key=lambda x: x[1], reverse=True)
         for cmd, count in sorted_commands[:10]:
-            stats_text += f"  • {c
+            stats_text += f"  • {cmd}: {count}\n"
+        
+        bot.send_message(message.chat.id, stats_text, parse_mode='Markdown')
+    else:
+        bot.send_message(message.chat.id, "❌ You don't have permission to view admin stats.")
+
+# ===== DEFAULT HANDLER =====
+@bot.message_handler(func=lambda m: True)
+def default_handler(message):
+    track
