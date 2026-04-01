@@ -2,122 +2,41 @@ import telebot
 from telebot.types import ReplyKeyboardMarkup
 import os
 import json
-from datetime import datetime, timedelta
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import socket
+from datetime import datetime
 
 TOKEN = os.getenv("BOT_TOKEN")
+
 if not TOKEN:
-    print("❌ ERROR: BOT_TOKEN not found in environment variables!")
+    print("❌ ERROR: BOT_TOKEN not found!")
+    print("Please set BOT_TOKEN in environment variables")
     exit(1)
 
-bot = telebot.TeleBot(TOKEN)
+# Try to initialize bot with error handling
+try:
+    bot = telebot.TeleBot(TOKEN)
+    # Test connection
+    bot_info = bot.get_me()
+    print(f"✅ Bot connected successfully!")
+    print(f"🤖 Bot name: {bot_info.first_name}")
+    print(f"🔑 Username: @{bot_info.username}")
+except Exception as e:
+    print(f"❌ Failed to connect: {e}")
+    exit(1)
 
 user_data = {}
+
+# Simple analytics
 user_analytics = {
     "total_users": set(),
-    "monthly_users": set(),
-    "weekly_users": set(),
-    "daily_users": set(),
-    "last_reset": datetime.now().date().isoformat(),
-    "commands_used": {},
-    "feature_usage": {}
+    "commands_used": {}
 }
-
-# Email configuration - Use environment variables for Railway
-EMAIL_CONFIG = {
-    "sender_email": os.getenv("EMAIL_USER", ""),
-    "sender_password": os.getenv("EMAIL_PASSWORD", ""),
-    "receiver_email": "mdzafarsabour35@gmail.com",
-    "smtp_server": "smtp.gmail.com",
-    "smtp_port": 587
-}
-
-# File to persist analytics
-ANALYTICS_FILE = "user_analytics.json"
-
-def send_email_notification(subject, body):
-    """Send email notification"""
-    if not EMAIL_CONFIG["sender_email"] or not EMAIL_CONFIG["sender_password"]:
-        print("⚠️ Email not configured, skipping notification")
-        return False
-    
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_CONFIG["sender_email"]
-        msg['To'] = EMAIL_CONFIG["receiver_email"]
-        msg['Subject'] = subject
-        
-        msg.attach(MIMEText(body, 'plain'))
-        
-        server = smtplib.SMTP(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"])
-        server.starttls()
-        server.login(EMAIL_CONFIG["sender_email"], EMAIL_CONFIG["sender_password"])
-        server.send_message(msg)
-        server.quit()
-        
-        print(f"✅ Email notification sent: {subject}")
-        return True
-    except Exception as e:
-        print(f"❌ Failed to send email: {e}")
-        return False
-
-def load_analytics():
-    global user_analytics
-    try:
-        with open(ANALYTICS_FILE, 'r') as f:
-            loaded = json.load(f)
-            loaded["total_users"] = set(loaded.get("total_users", []))
-            loaded["monthly_users"] = set(loaded.get("monthly_users", []))
-            loaded["weekly_users"] = set(loaded.get("weekly_users", []))
-            loaded["daily_users"] = set(loaded.get("daily_users", []))
-            user_analytics = loaded
-    except FileNotFoundError:
-        save_analytics()
-
-def save_analytics():
-    to_save = {
-        "total_users": list(user_analytics["total_users"]),
-        "monthly_users": list(user_analytics["monthly_users"]),
-        "weekly_users": list(user_analytics["weekly_users"]),
-        "daily_users": list(user_analytics["daily_users"]),
-        "last_reset": user_analytics["last_reset"],
-        "commands_used": user_analytics["commands_used"],
-        "feature_usage": user_analytics["feature_usage"]
-    }
-    with open(ANALYTICS_FILE, 'w') as f:
-        json.dump(to_save, f)
 
 def track_user(user_id, command="start"):
     """Track user activity"""
-    current_date = datetime.now().date()
-    
-    if user_analytics["last_reset"] != current_date.isoformat():
-        user_analytics["daily_users"] = set()
-        user_analytics["weekly_users"] = set(
-            u for u in user_analytics["weekly_users"] 
-            if datetime.fromisoformat(u) > datetime.now() - timedelta(days=7)
-        ) if user_analytics["weekly_users"] else set()
-        user_analytics["monthly_users"] = set(
-            u for u in user_analytics["monthly_users"]
-            if datetime.fromisoformat(u) > datetime.now() - timedelta(days=30)
-        ) if user_analytics["monthly_users"] else set()
-        user_analytics["last_reset"] = current_date.isoformat()
-    
     user_analytics["total_users"].add(user_id)
-    user_analytics["daily_users"].add(user_id)
-    user_analytics["weekly_users"].add(user_id)
-    user_analytics["monthly_users"].add(user_id)
     user_analytics["commands_used"][command] = user_analytics["commands_used"].get(command, 0) + 1
-    
-    save_analytics()
 
-# Load analytics on startup
-load_analytics()
-
-# ===== FULL DATABASE =====
+# ===== SYLLABUS DATABASE =====
 syllabus = {
     "1stNew": {
         "CE": "https://drive.google.com/uc?export=download&id=1Qd3X732fBWyEax1GTudkBWn7fpe57CgA",
@@ -207,29 +126,6 @@ def get_main_menu():
 @bot.message_handler(commands=['start'])
 def start(message):
     track_user(message.chat.id, "start")
-    
-    subject = f"🤖 New User Started Bot"
-    body = f"""
-Bot Start Notification
-━━━━━━━━━━━━━━━━━━━━━
-
-📊 User Details:
-• User ID: {message.chat.id}
-• Username: @{message.from_user.username if message.from_user.username else 'N/A'}
-• First Name: {message.from_user.first_name}
-• Last Name: {message.from_user.last_name if message.from_user.last_name else 'N/A'}
-• Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-📈 Current Statistics:
-• Total Users: {len(user_analytics['total_users'])}
-• Monthly Users: {len(user_analytics['monthly_users'])}
-• Daily Users: {len(user_analytics['daily_users'])}
-
-🤖 Bot Status: Running Successfully
-    """
-    
-    send_email_notification(subject, body)
-    
     bot.send_message(
         message.chat.id,
         "🎓 *Welcome to BEU Syllabus Bot* 🎓\n\n"
@@ -246,7 +142,6 @@ Bot Start Notification
 @bot.message_handler(func=lambda m: m.text == "📚 Syllabus")
 def syllabus_menu(message):
     track_user(message.chat.id, "syllabus")
-    
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("1stNew", "1stOld")
     markup.add("2ndNew", "2ndOld")
@@ -254,132 +149,51 @@ def syllabus_menu(message):
     markup.add("4th", "5th")
     markup.add("6th", "7th", "8th")
     markup.add("🔙 Main Menu")
-    
-    bot.send_message(
-        message.chat.id,
-        "📚 *Select your Semester:*",
-        reply_markup=markup,
-        parse_mode='Markdown'
-    )
+    bot.send_message(message.chat.id, "📚 *Select your Semester:*", reply_markup=markup, parse_mode='Markdown')
 
-# ===== STATISTICS FEATURE =====
+# ===== STATISTICS =====
 @bot.message_handler(func=lambda m: m.text == "📈 Statistics")
 def show_statistics(message):
     track_user(message.chat.id, "statistics")
-    
-    stats_text = "📊 *Bot Usage Statistics*\n"
-    stats_text += "━━━━━━━━━━━━━━━━━━━━━\n\n"
-    stats_text += f"👥 *Total Users:* {len(user_analytics['total_users'])}\n"
-    stats_text += f"📅 *Daily Active Users:* {len(user_analytics['daily_users'])}\n"
-    stats_text += f"📆 *Weekly Active Users:* {len(user_analytics['weekly_users'])}\n"
-    stats_text += f"📈 *Monthly Active Users:* {len(user_analytics['monthly_users'])}\n\n"
-    
+    stats_text = "📊 *Bot Usage Statistics*\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+    stats_text += f"👥 *Total Users:* {len(user_analytics['total_users'])}\n\n"
     stats_text += "*Top Commands Used:*\n"
     sorted_commands = sorted(user_analytics["commands_used"].items(), key=lambda x: x[1], reverse=True)[:5]
     for cmd, count in sorted_commands:
         stats_text += f"  • {cmd}: {count} times\n"
-    
-    stats_text += "\n💡 *Note:* Statistics are updated in real-time."
-    
     bot.send_message(message.chat.id, stats_text, parse_mode='Markdown')
 
-# ===== HELP FEATURE =====
+# ===== HELP =====
 @bot.message_handler(func=lambda m: m.text == "ℹ️ Help")
 def show_help(message):
-    track_user(message.chat.id, "help")
-    
-    help_text = "ℹ️ *Bot Help & Features*\n"
-    help_text += "━━━━━━━━━━━━━━━━━━━━━\n\n"
+    help_text = "ℹ️ *Bot Help*\n━━━━━━━━━━━━━━━━━━━━━\n\n"
     help_text += "*Available Features:*\n"
-    help_text += "📚 *Syllabus* - Download semester-wise syllabus PDFs\n"
-    help_text += "   • Available for all semesters (1st to 8th)\n"
-    help_text += "   • New & Old syllabus patterns\n"
-    help_text += "   • All branches (CE, CS, EE, ECE, ME, IOT)\n\n"
-    help_text += "📈 *Statistics* - View bot usage statistics\n"
-    help_text += "⭐ *Feedback* - Share your feedback/suggestions\n\n"
-    
+    help_text += "📚 Syllabus - Download semester-wise syllabus PDFs\n"
+    help_text += "📈 Statistics - View bot usage statistics\n"
+    help_text += "⭐ Feedback - Share your feedback\n\n"
     help_text += "*How to Use:*\n"
-    help_text += "1. Click on '📚 Syllabus'\n"
-    help_text += "2. Select your semester\n"
-    help_text += "3. Choose your branch\n"
-    help_text += "4. Download your syllabus PDF\n\n"
-    
-    help_text += "*Commands:*\n"
-    help_text += "/start - Start the bot\n"
-    help_text += "/help - Show this help message\n"
-    help_text += "/stats - View bot statistics (Admin only)\n\n"
-    
-    help_text += "*Support:*\n"
-    help_text += "For any issues or suggestions, please use the feedback feature."
-    
+    help_text += "1. Click '📚 Syllabus'\n2. Select semester\n3. Choose branch\n4. Download PDF"
     bot.send_message(message.chat.id, help_text, parse_mode='Markdown')
 
-# ===== FEEDBACK FEATURE =====
+# ===== FEEDBACK =====
 @bot.message_handler(func=lambda m: m.text == "⭐ Feedback")
 def ask_feedback(message):
     track_user(message.chat.id, "feedback_start")
-    
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup = ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🔙 Main Menu")
-    
-    msg = bot.send_message(
-        message.chat.id,
-        "⭐ *Share Your Feedback*\n\n"
-        "Please send your feedback/suggestions. "
-        "This will help us improve the bot.\n\n"
-        "You can send:\n"
-        "• Feature suggestions\n"
-        "• Bug reports\n"
-        "• Syllabus corrections\n"
-        "• General feedback\n\n"
-        "Type your message below:",
-        reply_markup=markup,
-        parse_mode='Markdown'
-    )
+    msg = bot.send_message(message.chat.id, "⭐ *Share Your Feedback*\n\nType your message below:", reply_markup=markup, parse_mode='Markdown')
     bot.register_next_step_handler(msg, save_feedback)
 
 def save_feedback(message):
     if message.text == "🔙 Main Menu":
         start(message)
         return
-    
     track_user(message.chat.id, "feedback_submit")
-    
     with open("feedback.txt", "a", encoding="utf-8") as f:
-        f.write(f"{datetime.now().isoformat()} - User {message.chat.id} ({message.from_user.username}):\n")
-        f.write(f"{message.text}\n")
-        f.write("-" * 50 + "\n")
-    
-    subject = f"⭐ New Feedback Received"
-    body = f"""
-Feedback Received
-━━━━━━━━━━━━━━━━━━━━━
+        f.write(f"{datetime.now()} - User {message.chat.id}: {message.text}\n")
+    bot.send_message(message.chat.id, "✅ *Thank you for your feedback!*", reply_markup=get_main_menu(), parse_mode='Markdown')
 
-📊 User Details:
-• User ID: {message.chat.id}
-• Username: @{message.from_user.username if message.from_user.username else 'N/A'}
-• Name: {message.from_user.first_name}
-• Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-💬 Feedback:
-{message.text}
-
-━━━━━━━━━━━━━━━━━━━━━
-Total Users: {len(user_analytics['total_users'])}
-Monthly Users: {len(user_analytics['monthly_users'])}
-    """
-    
-    send_email_notification(subject, body)
-    
-    bot.send_message(
-        message.chat.id,
-        "✅ *Thank you for your feedback!*\n\n"
-        "Your feedback has been recorded and will help us improve the bot.",
-        reply_markup=get_main_menu(),
-        parse_mode='Markdown'
-    )
-
-# ===== BACK TO MAIN MENU =====
+# ===== BACK BUTTON =====
 @bot.message_handler(func=lambda m: m.text == "🔙 Main Menu")
 def back_to_main(message):
     start(message)
@@ -389,108 +203,51 @@ def back_to_main(message):
 def sem_select(message):
     track_user(message.chat.id, f"semester_{message.text}")
     user_data[message.chat.id] = {"sem": message.text}
-    
     available_branches = list(syllabus[message.text].keys())
-    
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     for i in range(0, len(available_branches), 2):
         if i + 1 < len(available_branches):
             markup.add(available_branches[i], available_branches[i+1])
         else:
             markup.add(available_branches[i])
-    
     markup.add("🔙 Main Menu")
-    
-    bot.send_message(
-        message.chat.id,
-        f"🏫 *Select your Branch for {message.text}:*",
-        reply_markup=markup,
-        parse_mode='Markdown'
-    )
+    bot.send_message(message.chat.id, f"🏫 *Select your Branch for {message.text}:*", reply_markup=markup, parse_mode='Markdown')
 
 @bot.message_handler(func=lambda m: m.text in ["CE", "CS", "EE", "ECE", "ME", "IOT"])
 def send_pdf(message):
     track_user(message.chat.id, f"branch_{message.text}")
     data = user_data.get(message.chat.id)
-    
     if not data:
         bot.send_message(message.chat.id, "❌ पहले semester select करो!")
         return
-    
     sem = data["sem"]
     branch = message.text
-    
     if branch not in syllabus[sem]:
         bot.send_message(message.chat.id, f"❌ *{branch}* इस semester में available नहीं है!", parse_mode='Markdown')
         return
-    
     try:
         file_url = syllabus[sem][branch]
-        
         bot.send_message(message.chat.id, f"📥 *{branch} Syllabus ({sem}) भेज रहा हूँ...*", parse_mode='Markdown')
-        
-        bot.send_document(
-            message.chat.id, 
-            file_url, 
-            caption=f"📚 *{sem} Semester - {branch} Branch*\n\n✅ Download complete!\n\nFor more syllabi, use /start",
-            parse_mode='Markdown'
-        )
-        
-        subject = f"📚 Syllabus Downloaded"
-        body = f"""
-Syllabus Downloaded
-━━━━━━━━━━━━━━━━━━━━━
-
-📊 User Details:
-• User ID: {message.chat.id}
-• Username: @{message.from_user.username if message.from_user.username else 'N/A'}
-• Name: {message.from_user.first_name}
-• Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-📚 Download Details:
-• Semester: {sem}
-• Branch: {branch}
-• File: Syllabus PDF
-
-📈 Current Statistics:
-• Total Users: {len(user_analytics['total_users'])}
-• Monthly Users: {len(user_analytics['monthly_users'])}
-        """
-        
-        send_email_notification(subject, body)
-            
+        bot.send_document(message.chat.id, file_url, caption=f"📚 *{sem} Semester - {branch} Branch*\n\n✅ Download complete!", parse_mode='Markdown')
         if message.chat.id in user_data:
             del user_data[message.chat.id]
-            
     except Exception as e:
-        bot.send_message(
-            message.chat.id, 
-            f"❌ PDF download failed!\n\n🔗 Direct Link: {file_url}\n\nPlease try downloading manually.",
-            parse_mode='Markdown'
-        )
-
-# ===== ADMIN STATISTICS COMMAND =====
-@bot.message_handler(commands=['stats'])
-def admin_stats(message):
-    admin_ids = []  # Add admin user IDs like: [123456789, 987654321]
-    
-    if message.from_user.id in admin_ids:
-        stats_text = "📊 *Detailed Bot Statistics*\n\n"
-        stats_text += f"👥 Total Users: {len(user_analytics['total_users'])}\n"
-        stats_text += f"📈 Monthly Users: {len(user_analytics['monthly_users'])}\n"
-        stats_text += f"📆 Weekly Users: {len(user_analytics['weekly_users'])}\n"
-        stats_text += f"📅 Daily Users: {len(user_analytics['daily_users'])}\n\n"
-        stats_text += f"📊 Command Usage:\n"
-        
-        sorted_commands = sorted(user_analytics["commands_used"].items(), key=lambda x: x[1], reverse=True)
-        for cmd, count in sorted_commands[:10]:
-            stats_text += f"  • {cmd}: {count}\n"
-        
-        bot.send_message(message.chat.id, stats_text, parse_mode='Markdown')
-    else:
-        bot.send_message(message.chat.id, "❌ You don't have permission to view admin stats.")
+        bot.send_message(message.chat.id, f"❌ Download failed! Try manual link: {file_url}", parse_mode='Markdown')
 
 # ===== DEFAULT HANDLER =====
 @bot.message_handler(func=lambda m: True)
 def default_handler(message):
-    track
+    bot.send_message(message.chat.id, "❓ Unknown command!\n\nPlease use the menu buttons:", reply_markup=get_main_menu(), parse_mode='Markdown')
+
+# ===== RUN BOT =====
+if __name__ == "__main__":
+    print("="*50)
+    print("🚀 BEU Syllabus Bot Started...")
+    print("="*50)
+    print("✅ Bot is running successfully!")
+    print("="*50)
+    
+    try:
+        bot.infinity_polling(skip_pending=True, timeout=60)
+    except Exception as e:
+        print(f"❌ Bot polling error: {e}")
