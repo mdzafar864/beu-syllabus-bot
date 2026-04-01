@@ -3,6 +3,7 @@ from telebot.types import ReplyKeyboardMarkup
 import os
 import json
 from datetime import datetime
+import requests
 import logging
 
 # Configure logging
@@ -15,20 +16,16 @@ logger = logging.getLogger(__name__)
 # Get environment variables
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
-    logger.error("❌ BOT_TOKEN not found!")
+    logger.error("âŒ BOT_TOKEN not found!")
     exit(1)
 
 try:
     bot = telebot.TeleBot(TOKEN)
     bot_info = bot.get_me()
-    logger.info(f"✅ Bot connected: @{bot_info.username}")
+    logger.info(f"âœ… Bot connected: @{bot_info.username}")
 except Exception as e:
-    logger.error(f"❌ Bot connection failed: {e}")
+    logger.error(f"âŒ Bot connection failed: {e}")
     exit(1)
-
-# ===== CONFIGURATION =====
-# Replace with your Telegram User ID (get it from @userinfobot)
-ADMIN_ID = 123456789  # 🔴 CHANGE THIS TO YOUR TELEGRAM ID!
 
 user_data = {}
 user_analytics = {
@@ -74,7 +71,7 @@ def track_user(user_id, command="start"):
 # Load analytics
 load_analytics()
 
-# ===== SYLLABUS DATABASE =====
+# ===== SYLLABUS DATABASE WITH WORKING LINKS =====
 syllabus = {
     "1stNew": {
         "CE": "https://drive.google.com/uc?export=download&id=1Qd3X732fBWyEax1GTudkBWn7fpe57CgA",
@@ -153,71 +150,15 @@ syllabus = {
     }
 }
 
-# ===== FUNCTION TO SEND NOTIFICATION TO ADMIN =====
-def notify_admin(notification_type, user_id, username, name, details=""):
-    """Send notification to admin Telegram"""
-    try:
-        if notification_type == "feedback":
-            message = f"""
-⭐ *NEW FEEDBACK RECEIVED* ⭐
-━━━━━━━━━━━━━━━━━━━━━
-
-👤 *User Details:*
-• User ID: `{user_id}`
-• Username: @{username if username else 'N/A'}
-• Name: {name}
-• Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-💬 *Feedback:*
-{details}
-
-━━━━━━━━━━━━━━━━━━━━━
-Total Users: {len(user_analytics['total_users'])}
-            """
-            
-        elif notification_type == "new_user":
-            message = f"""
-👤 *NEW USER STARTED BOT* 👤
-━━━━━━━━━━━━━━━━━━━━━
-
-• User ID: `{user_id}`
-• Username: @{username if username else 'N/A'}
-• Name: {name}
-• Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-📊 *Current Stats:*
-Total Users: {len(user_analytics['total_users'])}
-            """
-            
-        elif notification_type == "download":
-            message = f"""
-📚 *SYLLABUS DOWNLOADED* 📚
-━━━━━━━━━━━━━━━━━━━━━
-
-👤 *User:* @{username if username else 'N/A'} ({name})
-📖 *Semester:* {details.get('sem', 'N/A')}
-🏫 *Branch:* {details.get('branch', 'N/A')}
-⏰ *Time:* {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-📊 *Total Downloads:* {user_analytics['commands_used'].get('branch_CE', 0) + user_analytics['commands_used'].get('branch_CS', 0)}
-            """
-        else:
-            message = f"""
-📢 *NOTIFICATION*
-{details}
-            """
-        
-        bot.send_message(ADMIN_ID, message, parse_mode='Markdown')
-        logger.info(f"Notification sent to admin: {notification_type}")
-        
-    except Exception as e:
-        logger.error(f"Failed to send admin notification: {e}")
+def get_direct_download_url(file_id):
+    """Convert Google Drive file ID to direct download URL"""
+    return f"https://drive.google.com/uc?export=download&id={file_id}"
 
 # ===== MAIN MENU =====
 def get_main_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("📚 Syllabus")
-    markup.add("📈 Statistics", "ℹ️ Help", "⭐ Feedback")
+    markup.add("ðŸ“š Syllabus")
+    markup.add("ðŸ“ˆ Statistics", "â„¹ï¸ Help", "â­ Feedback")
     return markup
 
 # ===== START COMMAND =====
@@ -226,22 +167,14 @@ def start(message):
     try:
         track_user(message.chat.id, "start")
         
-        # Notify admin about new user
-        notify_admin(
-            "new_user",
-            message.chat.id,
-            message.from_user.username,
-            message.from_user.first_name
-        )
-        
         bot.send_message(
             message.chat.id,
-            "🎓 *Welcome to BEU Syllabus Bot* 🎓\n\n"
+            "ðŸŽ“ *Welcome to BEU Syllabus Bot* ðŸŽ“\n\n"
             "I can help you download syllabus for all semesters and branches.\n\n"
-            "📚 *Available Features:*\n"
-            "• All semesters (1st to 8th)\n"
-            "• New & Old syllabus patterns\n"
-            "• All branches (CE, CS, EE, ECE, ME, IOT)\n\n"
+            "ðŸ“š *Available Features:*\n"
+            "â€¢ All semesters (1st to 8th)\n"
+            "â€¢ New & Old syllabus patterns\n"
+            "â€¢ All branches (CE, CS, EE, ECE, ME, IOT)\n\n"
             "Select an option from the menu below:",
             reply_markup=get_main_menu(),
             parse_mode='Markdown'
@@ -250,7 +183,7 @@ def start(message):
         logger.error(f"Error in start: {e}")
 
 # ===== SYLLABUS MENU =====
-@bot.message_handler(func=lambda m: m.text == "📚 Syllabus")
+@bot.message_handler(func=lambda m: m.text == "ðŸ“š Syllabus")
 def syllabus_menu(message):
     try:
         track_user(message.chat.id, "syllabus")
@@ -260,13 +193,13 @@ def syllabus_menu(message):
         markup.add("3rdNew", "3rdOld")
         markup.add("4th", "5th")
         markup.add("6th", "7th", "8th")
-        markup.add("🔙 Main Menu")
+        markup.add("ðŸ”™ Main Menu")
         
         bot.send_message(
             message.chat.id,
-            "📚 *Select your Semester:*\n\n"
-            "• New = New syllabus pattern\n"
-            "• Old = Old syllabus pattern",
+            "ðŸ“š *Select your Semester:*\n\n"
+            "â€¢ New = New syllabus pattern\n"
+            "â€¢ Old = Old syllabus pattern",
             reply_markup=markup,
             parse_mode='Markdown'
         )
@@ -274,20 +207,20 @@ def syllabus_menu(message):
         logger.error(f"Error in syllabus_menu: {e}")
 
 # ===== STATISTICS =====
-@bot.message_handler(func=lambda m: m.text == "📈 Statistics")
+@bot.message_handler(func=lambda m: m.text == "ðŸ“ˆ Statistics")
 def show_statistics(message):
     try:
         track_user(message.chat.id, "statistics")
         
-        stats_text = "📊 *Bot Usage Statistics*\n"
-        stats_text += "━━━━━━━━━━━━━━━━━━━━━\n\n"
-        stats_text += f"👥 *Total Users:* {len(user_analytics['total_users'])}\n"
-        stats_text += f"📅 *Today's Active:* {len(user_analytics['daily_users'])}\n\n"
+        stats_text = "ðŸ“Š *Bot Usage Statistics*\n"
+        stats_text += "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n"
+        stats_text += f"ðŸ‘¥ *Total Users:* {len(user_analytics['total_users'])}\n"
+        stats_text += f"ðŸ“… *Today's Active:* {len(user_analytics['daily_users'])}\n\n"
         
         stats_text += "*Most Used Features:*\n"
         sorted_commands = sorted(user_analytics["commands_used"].items(), key=lambda x: x[1], reverse=True)[:5]
         for cmd, count in sorted_commands:
-            emoji = "📚" if cmd == "syllabus" else "⭐" if "feedback" in cmd else "📊"
+            emoji = "ðŸ“š" if cmd == "syllabus" else "â­" if cmd == "feedback" else "ðŸ“Š"
             stats_text += f"  {emoji} {cmd}: {count} times\n"
         
         bot.send_message(message.chat.id, stats_text, parse_mode='Markdown')
@@ -295,50 +228,50 @@ def show_statistics(message):
         logger.error(f"Error in statistics: {e}")
 
 # ===== HELP =====
-@bot.message_handler(func=lambda m: m.text == "ℹ️ Help")
+@bot.message_handler(func=lambda m: m.text == "â„¹ï¸ Help")
 def show_help(message):
     try:
-        help_text = "ℹ️ *Bot Help Guide*\n"
-        help_text += "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        help_text = "â„¹ï¸ *Bot Help Guide*\n"
+        help_text += "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n"
         help_text += "*How to Download Syllabus:*\n"
-        help_text += "1️⃣ Click '📚 Syllabus'\n"
-        help_text += "2️⃣ Select your semester (e.g., 3rdNew)\n"
-        help_text += "3️⃣ Choose your branch (CE, CS, etc.)\n"
-        help_text += "4️⃣ PDF will be sent automatically\n\n"
+        help_text += "1ï¸âƒ£ Click 'ðŸ“š Syllabus'\n"
+        help_text += "2ï¸âƒ£ Select your semester (e.g., 3rdNew)\n"
+        help_text += "3ï¸âƒ£ Choose your branch (CE, CS, etc.)\n"
+        help_text += "4ï¸âƒ£ PDF will be sent automatically\n\n"
         
         help_text += "*Available Semesters:*\n"
-        help_text += "• 1stNew, 1stOld\n"
-        help_text += "• 2ndNew, 2ndOld\n"
-        help_text += "• 3rdNew, 3rdOld\n"
-        help_text += "• 4th, 5th, 6th, 7th, 8th\n\n"
+        help_text += "â€¢ 1stNew, 1stOld\n"
+        help_text += "â€¢ 2ndNew, 2ndOld\n"
+        help_text += "â€¢ 3rdNew, 3rdOld\n"
+        help_text += "â€¢ 4th, 5th, 6th, 7th, 8th\n\n"
         
         help_text += "*Available Branches:*\n"
         help_text += "CE, CS, EE, ECE, ME, IOT\n\n"
         
         help_text += "*Commands:*\n"
         help_text += "/start - Restart bot\n"
-        help_text += "📈 Statistics - View bot stats\n"
-        help_text += "⭐ Feedback - Send feedback"
+        help_text += "ðŸ“ˆ Statistics - View bot stats\n"
+        help_text += "â­ Feedback - Send feedback"
         
         bot.send_message(message.chat.id, help_text, parse_mode='Markdown')
     except Exception as e:
         logger.error(f"Error in help: {e}")
 
-# ===== FEEDBACK FEATURE =====
-@bot.message_handler(func=lambda m: m.text == "⭐ Feedback")
+# ===== FEEDBACK =====
+@bot.message_handler(func=lambda m: m.text == "â­ Feedback")
 def ask_feedback(message):
     try:
         track_user(message.chat.id, "feedback_start")
         markup = ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add("🔙 Main Menu")
+        markup.add("ðŸ”™ Main Menu")
         
         msg = bot.send_message(
             message.chat.id,
-            "⭐ *Share Your Feedback*\n\n"
+            "â­ *Share Your Feedback*\n\n"
             "Please tell me:\n"
-            "• What features you'd like to see\n"
-            "• Any issues you faced\n"
-            "• General suggestions\n\n"
+            "â€¢ What features you'd like to see\n"
+            "â€¢ Any issues you faced\n"
+            "â€¢ General suggestions\n\n"
             "Type your message below:",
             reply_markup=markup,
             parse_mode='Markdown'
@@ -349,39 +282,28 @@ def ask_feedback(message):
 
 def save_feedback(message):
     try:
-        if message.text == "🔙 Main Menu":
+        if message.text == "ðŸ”™ Main Menu":
             start(message)
             return
         
         track_user(message.chat.id, "feedback_submit")
         
-        # Save feedback to file
+        # Save feedback
         with open("feedback.txt", "a", encoding="utf-8") as f:
             f.write(f"{datetime.now()} - User {message.chat.id}: {message.text}\n")
         
-        # Send feedback directly to admin Telegram
-        notify_admin(
-            "feedback",
-            message.chat.id,
-            message.from_user.username,
-            message.from_user.first_name,
-            message.text
-        )
-        
         bot.send_message(
             message.chat.id,
-            "✅ *Thank you for your feedback!*\n\n"
-            "Your feedback has been sent to the bot developer.\n"
-            "We appreciate your input! 🙏",
+            "âœ… *Thank you for your feedback!*\n\n"
+            "Your input helps improve the bot.",
             reply_markup=get_main_menu(),
             parse_mode='Markdown'
         )
     except Exception as e:
         logger.error(f"Error saving feedback: {e}")
-        bot.send_message(message.chat.id, "❌ Error saving feedback. Please try again.")
 
 # ===== BACK BUTTON =====
-@bot.message_handler(func=lambda m: m.text == "🔙 Main Menu")
+@bot.message_handler(func=lambda m: m.text == "ðŸ”™ Main Menu")
 def back_to_main(message):
     start(message)
 
@@ -395,17 +317,18 @@ def sem_select(message):
         available_branches = list(syllabus[message.text].keys())
         markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         
+        # Add branches in rows of 2
         for i in range(0, len(available_branches), 2):
             if i + 1 < len(available_branches):
                 markup.add(available_branches[i], available_branches[i+1])
             else:
                 markup.add(available_branches[i])
         
-        markup.add("🔙 Main Menu")
+        markup.add("ðŸ”™ Main Menu")
         
         bot.send_message(
             message.chat.id,
-            f"🏫 *Select your Branch for {message.text}:*\n\n"
+            f"ðŸ« *Select your Branch for {message.text}:*\n\n"
             f"Available: {', '.join(available_branches)}",
             reply_markup=markup,
             parse_mode='Markdown'
@@ -423,7 +346,7 @@ def send_pdf(message):
         if not data:
             bot.send_message(
                 message.chat.id, 
-                "❌ Please select semester first!\n\nClick 📚 Syllabus to start.",
+                "âŒ Please select semester first!\n\nClick ðŸ“š Syllabus to start.",
                 reply_markup=get_main_menu()
             )
             return
@@ -434,7 +357,7 @@ def send_pdf(message):
         if branch not in syllabus[sem]:
             bot.send_message(
                 message.chat.id, 
-                f"❌ *{branch}* branch is not available for {sem}!\n\nPlease select from the menu.",
+                f"âŒ *{branch}* branch is not available for {sem}!\n\nPlease select from the menu.",
                 parse_mode='Markdown'
             )
             return
@@ -444,7 +367,7 @@ def send_pdf(message):
         # Send loading message
         loading_msg = bot.send_message(
             message.chat.id, 
-            f"📥 *Downloading {branch} Syllabus ({sem})...*\n\nPlease wait...",
+            f"ðŸ“¥ *Downloading {branch} Syllabus ({sem})...*\n\nPlease wait...",
             parse_mode='Markdown'
         )
         
@@ -453,22 +376,13 @@ def send_pdf(message):
             bot.send_document(
                 message.chat.id, 
                 file_url,
-                caption=f"📚 *{sem} Semester - {branch} Branch*\n\n✅ Download Complete!\n\n📌 For more syllabi, use /start",
+                caption=f"ðŸ“š *{sem} Semester - {branch} Branch*\n\nâœ… Download Complete!\n\nðŸ“Œ For more syllabi, use /start",
                 parse_mode='Markdown',
                 timeout=30
             )
             
             # Delete loading message
             bot.delete_message(message.chat.id, loading_msg.message_id)
-            
-            # Notify admin about download
-            notify_admin(
-                "download",
-                message.chat.id,
-                message.from_user.username,
-                message.from_user.first_name,
-                {"sem": sem, "branch": branch}
-            )
             
             # Clear user data
             if message.chat.id in user_data:
@@ -477,8 +391,8 @@ def send_pdf(message):
         except Exception as e:
             logger.error(f"Error sending document: {e}")
             bot.edit_message_text(
-                f"⚠️ *Unable to send PDF directly*\n\n"
-                f"📎 *Direct Download Link:*\n{file_url}\n\n"
+                f"âš ï¸ *Unable to send PDF directly*\n\n"
+                f"ðŸ“Ž *Direct Download Link:*\n{file_url}\n\n"
                 f"Click the link above to download the syllabus.",
                 message.chat.id,
                 loading_msg.message_id,
@@ -490,22 +404,32 @@ def send_pdf(message):
         logger.error(f"Error in send_pdf: {e}")
         bot.send_message(
             message.chat.id, 
-            "❌ *Download Failed!*\n\nPlease try again or contact support.",
+            "âŒ *Download Failed!*\n\nPlease try again or contact support.",
             parse_mode='Markdown'
         )
 
-# ===== ADMIN COMMANDS =====
-@bot.message_handler(commands=['myid'])
-def get_user_id(message):
-    """Get your Telegram ID"""
+# ===== DEFAULT HANDLER =====
+@bot.message_handler(func=lambda m: True)
+def default_handler(message):
     bot.send_message(
         message.chat.id,
-        f"🆔 *Your Telegram ID:* `{message.from_user.id}`\n\n"
-        f"👤 *Username:* @{message.from_user.username if message.from_user.username else 'N/A'}\n"
-        f"📛 *Name:* {message.from_user.first_name}\n\n"
-        f"💡 Use this ID in ADMIN_ID variable to receive feedback notifications!",
+        "â“ *Unknown Command*\n\n"
+        "Please use the buttons below to navigate:",
+        reply_markup=get_main_menu(),
         parse_mode='Markdown'
     )
 
-@bot.message_handler(commands=['admin'])
-def admin_panel(
+# ===== RUN BOT =====
+if __name__ == "__main__":
+    logger.info("="*50)
+    logger.info("ðŸš€ BEU Syllabus Bot Starting...")
+    logger.info(f"ðŸ¤– Bot: @{bot_info.username}")
+    logger.info(f"ðŸ“Š Total Users: {len(user_analytics['total_users'])}")
+    logger.info("âœ… Bot is ready!")
+    logger.info("="*50)
+    
+    try:
+        bot.infinity_polling(timeout=60, skip_pending=True)
+    except Exception as e:
+        logger.error(f"âŒ Bot polling error: {e}")
+        raise
