@@ -3,7 +3,6 @@ from telebot.types import ReplyKeyboardMarkup
 import os
 import json
 from datetime import datetime
-import requests
 import logging
 
 # Configure logging
@@ -26,6 +25,10 @@ try:
 except Exception as e:
     logger.error(f"❌ Bot connection failed: {e}")
     exit(1)
+
+# ===== CONFIGURATION =====
+# Replace with your Telegram User ID (get it from @userinfobot)
+ADMIN_ID = 123456789  # 🔴 CHANGE THIS TO YOUR TELEGRAM ID!
 
 user_data = {}
 user_analytics = {
@@ -71,7 +74,7 @@ def track_user(user_id, command="start"):
 # Load analytics
 load_analytics()
 
-# ===== SYLLABUS DATABASE WITH WORKING LINKS =====
+# ===== SYLLABUS DATABASE =====
 syllabus = {
     "1stNew": {
         "CE": "https://drive.google.com/uc?export=download&id=1Qd3X732fBWyEax1GTudkBWn7fpe57CgA",
@@ -150,9 +153,65 @@ syllabus = {
     }
 }
 
-def get_direct_download_url(file_id):
-    """Convert Google Drive file ID to direct download URL"""
-    return f"https://drive.google.com/uc?export=download&id={file_id}"
+# ===== FUNCTION TO SEND NOTIFICATION TO ADMIN =====
+def notify_admin(notification_type, user_id, username, name, details=""):
+    """Send notification to admin Telegram"""
+    try:
+        if notification_type == "feedback":
+            message = f"""
+⭐ *NEW FEEDBACK RECEIVED* ⭐
+━━━━━━━━━━━━━━━━━━━━━
+
+👤 *User Details:*
+• User ID: `{user_id}`
+• Username: @{username if username else 'N/A'}
+• Name: {name}
+• Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+💬 *Feedback:*
+{details}
+
+━━━━━━━━━━━━━━━━━━━━━
+Total Users: {len(user_analytics['total_users'])}
+            """
+            
+        elif notification_type == "new_user":
+            message = f"""
+👤 *NEW USER STARTED BOT* 👤
+━━━━━━━━━━━━━━━━━━━━━
+
+• User ID: `{user_id}`
+• Username: @{username if username else 'N/A'}
+• Name: {name}
+• Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+📊 *Current Stats:*
+Total Users: {len(user_analytics['total_users'])}
+            """
+            
+        elif notification_type == "download":
+            message = f"""
+📚 *SYLLABUS DOWNLOADED* 📚
+━━━━━━━━━━━━━━━━━━━━━
+
+👤 *User:* @{username if username else 'N/A'} ({name})
+📖 *Semester:* {details.get('sem', 'N/A')}
+🏫 *Branch:* {details.get('branch', 'N/A')}
+⏰ *Time:* {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+📊 *Total Downloads:* {user_analytics['commands_used'].get('branch_CE', 0) + user_analytics['commands_used'].get('branch_CS', 0)}
+            """
+        else:
+            message = f"""
+📢 *NOTIFICATION*
+{details}
+            """
+        
+        bot.send_message(ADMIN_ID, message, parse_mode='Markdown')
+        logger.info(f"Notification sent to admin: {notification_type}")
+        
+    except Exception as e:
+        logger.error(f"Failed to send admin notification: {e}")
 
 # ===== MAIN MENU =====
 def get_main_menu():
@@ -166,6 +225,14 @@ def get_main_menu():
 def start(message):
     try:
         track_user(message.chat.id, "start")
+        
+        # Notify admin about new user
+        notify_admin(
+            "new_user",
+            message.chat.id,
+            message.from_user.username,
+            message.from_user.first_name
+        )
         
         bot.send_message(
             message.chat.id,
@@ -220,7 +287,7 @@ def show_statistics(message):
         stats_text += "*Most Used Features:*\n"
         sorted_commands = sorted(user_analytics["commands_used"].items(), key=lambda x: x[1], reverse=True)[:5]
         for cmd, count in sorted_commands:
-            emoji = "📚" if cmd == "syllabus" else "⭐" if cmd == "feedback" else "📊"
+            emoji = "📚" if cmd == "syllabus" else "⭐" if "feedback" in cmd else "📊"
             stats_text += f"  {emoji} {cmd}: {count} times\n"
         
         bot.send_message(message.chat.id, stats_text, parse_mode='Markdown')
@@ -257,7 +324,7 @@ def show_help(message):
     except Exception as e:
         logger.error(f"Error in help: {e}")
 
-# ===== FEEDBACK =====
+# ===== FEEDBACK FEATURE =====
 @bot.message_handler(func=lambda m: m.text == "⭐ Feedback")
 def ask_feedback(message):
     try:
@@ -288,19 +355,30 @@ def save_feedback(message):
         
         track_user(message.chat.id, "feedback_submit")
         
-        # Save feedback
+        # Save feedback to file
         with open("feedback.txt", "a", encoding="utf-8") as f:
             f.write(f"{datetime.now()} - User {message.chat.id}: {message.text}\n")
+        
+        # Send feedback directly to admin Telegram
+        notify_admin(
+            "feedback",
+            message.chat.id,
+            message.from_user.username,
+            message.from_user.first_name,
+            message.text
+        )
         
         bot.send_message(
             message.chat.id,
             "✅ *Thank you for your feedback!*\n\n"
-            "Your input helps improve the bot.",
+            "Your feedback has been sent to the bot developer.\n"
+            "We appreciate your input! 🙏",
             reply_markup=get_main_menu(),
             parse_mode='Markdown'
         )
     except Exception as e:
         logger.error(f"Error saving feedback: {e}")
+        bot.send_message(message.chat.id, "❌ Error saving feedback. Please try again.")
 
 # ===== BACK BUTTON =====
 @bot.message_handler(func=lambda m: m.text == "🔙 Main Menu")
@@ -317,7 +395,6 @@ def sem_select(message):
         available_branches = list(syllabus[message.text].keys())
         markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         
-        # Add branches in rows of 2
         for i in range(0, len(available_branches), 2):
             if i + 1 < len(available_branches):
                 markup.add(available_branches[i], available_branches[i+1])
@@ -384,6 +461,15 @@ def send_pdf(message):
             # Delete loading message
             bot.delete_message(message.chat.id, loading_msg.message_id)
             
+            # Notify admin about download
+            notify_admin(
+                "download",
+                message.chat.id,
+                message.from_user.username,
+                message.from_user.first_name,
+                {"sem": sem, "branch": branch}
+            )
+            
             # Clear user data
             if message.chat.id in user_data:
                 del user_data[message.chat.id]
@@ -408,28 +494,18 @@ def send_pdf(message):
             parse_mode='Markdown'
         )
 
-# ===== DEFAULT HANDLER =====
-@bot.message_handler(func=lambda m: True)
-def default_handler(message):
+# ===== ADMIN COMMANDS =====
+@bot.message_handler(commands=['myid'])
+def get_user_id(message):
+    """Get your Telegram ID"""
     bot.send_message(
         message.chat.id,
-        "❓ *Unknown Command*\n\n"
-        "Please use the buttons below to navigate:",
-        reply_markup=get_main_menu(),
+        f"🆔 *Your Telegram ID:* `{message.from_user.id}`\n\n"
+        f"👤 *Username:* @{message.from_user.username if message.from_user.username else 'N/A'}\n"
+        f"📛 *Name:* {message.from_user.first_name}\n\n"
+        f"💡 Use this ID in ADMIN_ID variable to receive feedback notifications!",
         parse_mode='Markdown'
     )
 
-# ===== RUN BOT =====
-if __name__ == "__main__":
-    logger.info("="*50)
-    logger.info("🚀 BEU Syllabus Bot Starting...")
-    logger.info(f"🤖 Bot: @{bot_info.username}")
-    logger.info(f"📊 Total Users: {len(user_analytics['total_users'])}")
-    logger.info("✅ Bot is ready!")
-    logger.info("="*50)
-    
-    try:
-        bot.infinity_polling(timeout=60, skip_pending=True)
-    except Exception as e:
-        logger.error(f"❌ Bot polling error: {e}")
-        raise
+@bot.message_handler(commands=['admin'])
+def admin_panel(
